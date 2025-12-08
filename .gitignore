@@ -205,3 +205,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# SourceGear Vault
+_sgbak
+
+# Data Folders
+/datasets
+/logs
+/models
+
+# Temporary files for debug
+/temp.ipynb
+/temp.py
