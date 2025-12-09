@@ -213,6 +213,7 @@ _sgbak
 /datasets
 /logs
 /models
+/checkpoints
 
 # Temporary files for debug
 /temp.ipynb

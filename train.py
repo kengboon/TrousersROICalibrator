@@ -2,6 +2,7 @@ from datetime import datetime
 import os, gc
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision.models.detection import keypointrcnn_resnet50_fpn, KeypointRCNN_ResNet50_FPN_Weights
@@ -116,7 +117,7 @@ def train():
                             optimizer.zero_grad()
                     pbar.update()
 
-            epoch_loss = epoch_losses.cpu().numpy().mean().item()
+            epoch_loss = np.array(epoch_losses).mean().item()
             if phase == "train":
                 train_losses.append(epoch_loss)
             else:
@@ -124,7 +125,7 @@ def train():
                 lr_scheduler.step(epoch_loss)
                 earlystop_triggered = earlystop_checker.check(epoch_loss)
                 improving = not earlystop_checker.is_stagnant
-                if improving or earlystop_triggered:
+                if improving or earlystop_triggered or epoch == 0:
                     # Save checkpoint
                     ckpt = {
                         "epoch"             : epoch,
@@ -139,8 +140,8 @@ def train():
                     os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
                     torch.save(ckpt, ckpt_path)
 
-        torch.cuda.empty_cache()
-        gc.collect()
+            torch.cuda.empty_cache()
+            gc.collect()
 
         print(f"Train loss: {train_losses[epoch]:.4f}, val loss: {val_losses[epoch]:.4f}")
 
