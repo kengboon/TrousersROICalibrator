@@ -142,7 +142,3 @@ class DeepFashion2Dataset(Dataset):
         image = torch.from_numpy(image).float() / 255.0
 
         return image, target
-
-# Collate function is REQUIRED for detection datasets
-def collate_fn(batch):
-    return tuple(zip(*batch))
