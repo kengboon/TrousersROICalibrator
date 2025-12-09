@@ -114,6 +114,7 @@ def train():
                             optimizer.step()
                             accum_batch = 0
                             optimizer.zero_grad()
+                    pbar.update()
 
             epoch_loss = epoch_losses.cpu().numpy().mean().item()
             if phase == "train":
