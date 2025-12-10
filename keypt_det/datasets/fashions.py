@@ -91,7 +91,7 @@ class DeepFashion2Dataset(Dataset):
 
             item = anno_data[key]
 
-            if item['category_id'] not in self.category_ids:
+            if (self.category_ids is not None) and (item['category_id'] not in self.category_ids):
                 continue
 
             # Bounding Box [x1, y1, x2, y2]
@@ -117,7 +117,12 @@ class DeepFashion2Dataset(Dataset):
                 kps.append([x, y, vis])
             
             keypoints.append(kps)
-            labels.append(1) # Class 1 = Jeans (0 is always background)
+
+            if self.category_ids is not None:
+                # Class starts from 1 (0 is always background)
+                labels.append(self.category_ids.index(item['category_id']))
+            else:
+                labels.append(item["category_id"])
 
         # 4. Convert to Tensors
         target = {}

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision.models.detection import keypointrcnn_resnet50_fpn, KeypointRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.keypoint_rcnn import KeypointRCNNPredictor
 from tqdm import tqdm
 
@@ -14,37 +15,46 @@ from keypt_det.utils import EarlyStopping
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def get_models(output_keypoints: int | None = None):
-    # Load a pre-trained Keypoint R-CNN model
+def get_model(
+        num_classes: int | None = None,
+        num_keypoints: int | None = None
+    ):
+    # Load a pre-trained Keypoint RCNN model
     weights = KeypointRCNN_ResNet50_FPN_Weights.DEFAULT
     model = keypointrcnn_resnet50_fpn(weights=weights)
 
-    # If a specific number of output keypoints is provided, modify the model's head
-    if output_keypoints is not None:
+    # Modify the model's head
+    if num_classes is not None:
+        in_features = model.roi_heads.box_predictor.cls_score.in_features
+        model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+    if num_keypoints is not None:
         in_features = model.roi_heads.keypoint_predictor.kps_score_lowres.in_channels
-        model.roi_heads.keypoint_predictor = KeypointRCNNPredictor(in_features, output_keypoints)
+        model.roi_heads.keypoint_predictor = KeypointRCNNPredictor(in_features, num_keypoints)
 
     return model
 
 def train():
     start_time = datetime.now()
 
+    # Filter category
+    category_ids = [8]
+
     train_dataset = DeepFashion2Dataset(
         "datasets/deepfashion2/train",
-        category_ids=[8],
+        category_ids=category_ids,
         exclude_occulded=True
     )
     val_dataset = DeepFashion2Dataset(
         "datasets/deepfashion2/validation",
-        category_ids=[8],
+        category_ids=category_ids,
         exclude_occulded=True
     )
 
     print(f"Data loaded, time taken={(datetime.now()-start_time).total_seconds():.2f}s")
 
-    batch_size = 4
-    grad_accum_batch = 4
-    total_epochs = 10
+    batch_size = 2
+    grad_accum_batch = 2
+    total_epochs = 100
 
     train_dataloader = DataLoader(
         dataset=train_dataset,
@@ -59,8 +69,9 @@ def train():
         collate_fn=collate_fn
     )
 
+    num_classes = None if category_ids is None else len(category_ids) + 1 # 0 = background
     num_keypoints = 294  # Maximum keypoints for DeepFashion2 dataset
-    model = get_models(output_keypoints=num_keypoints).to(device)
+    model = get_model(num_classes=num_classes, num_keypoints=num_keypoints).to(device)
 
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=1e-3)
@@ -74,7 +85,7 @@ def train():
         cooldown=2,
         min_lr=1e-6
     )
-    earlystop_checker = EarlyStopping(patience=10, min_delta=0.005, mode="min")
+    earlystop_checker = EarlyStopping(patience=5, min_delta=0.005, mode="min")
 
     train_losses = []
     val_losses = []
@@ -88,10 +99,10 @@ def train():
             if phase == "train":
                 dataloader = train_dataloader
                 model.train()
-                optimizer.zero_grad() # Reset gradient
+                optimizer.zero_grad() # Reset gradients
             else:
                 dataloader = val_dataloader
-                model.eval()
+                #model.eval() # Do not change model for TorchVision's implementation
 
             epoch_losses = []
             accum_batch = 0
@@ -102,7 +113,8 @@ def train():
                     images = [image.to(device) for image in images]
                     targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-                    loss_dict = model(images, targets)
+                    with torch.set_grad_enabled(phase == "train"):
+                        loss_dict = model(images, targets)
 
                     # Combine losses
                     loss = sum(loss for loss in loss_dict.values())
@@ -132,6 +144,7 @@ def train():
                         "model_weight"      : model.state_dict(),
                         "num_keypoints"     : num_keypoints,
                         "optimizer"         : optimizer.state_dict(),
+                        "lr_scheduler"      : lr_scheduler.state_dict(),
                         "earlystopping"     : earlystop_checker.state_dict(),
                         "train_losses"      : train_losses,
                         "val_losses"        : val_losses
