@@ -40,12 +40,12 @@ def train():
     category_ids = [8]
 
     train_dataset = DeepFashion2Dataset(
-        "datasets/deepfashion2/train",
+        "datasets/deepfashion2/train-small",
         category_ids=category_ids,
         exclude_occulded=True
     )
     val_dataset = DeepFashion2Dataset(
-        "datasets/deepfashion2/validation",
+        "datasets/deepfashion2/val-small",
         category_ids=category_ids,
         exclude_occulded=True
     )
@@ -75,7 +75,8 @@ def train():
 
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(
-        params, lr=0.005,
+        params,
+        lr=0.005,
         momentum=0.9,
         weight_decay=0.0005
     )
@@ -117,7 +118,6 @@ def train():
             accum_batch = 0
             with tqdm(dataloader, desc=f"Epoch {epoch+1}/{total_epochs} - {phase}") as pbar:
                 for batch_i, (images, targets) in enumerate(dataloader):
-
                     # Move data to device
                     images = [image.to(device) for image in images]
                     targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -131,6 +131,7 @@ def train():
 
                     if phase == "train":
                         loss.backward()
+                        torch.nn.utils.clip_grad_norm_(params, max_norm=10.0) # Gradient clipping
                         accum_batch += 1
                         if (accum_batch >= grad_accum_batch) or (batch_i == len(dataloader) - 1):
                             optimizer.step()
@@ -154,8 +155,10 @@ def train():
                     ckpt = {
                         "epoch"             : epoch,
                         "model_weight"      : model.state_dict(),
+                        "num_classes"       : num_classes,
                         "num_keypoints"     : num_keypoints,
                         "optimizer"         : optimizer.state_dict(),
+                        "warmup"            : warmup_scheduler.state_dict(),
                         "lr_scheduler"      : lr_scheduler.state_dict(),
                         "earlystopping"     : earlystop_checker.state_dict(),
                         "train_losses"      : train_losses,
