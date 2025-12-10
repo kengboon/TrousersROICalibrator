@@ -120,7 +120,7 @@ class DeepFashion2Dataset(Dataset):
 
             if self.category_ids is not None:
                 # Class starts from 1 (0 is always background)
-                labels.append(self.category_ids.index(item['category_id']))
+                labels.append(self.category_ids.index(item['category_id']) + 1)
             else:
                 labels.append(item["category_id"])
 
