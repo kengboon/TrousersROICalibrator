@@ -74,7 +74,16 @@ def train():
     model = get_model(num_classes=num_classes, num_keypoints=num_keypoints).to(device)
 
     params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.SGD(params, lr=1e-3)
+    optimizer = torch.optim.SGD(
+        params, lr=0.005,
+        momentum=0.9,
+        weight_decay=0.0005
+    )
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer=optimizer,
+        start_factor=0.001,
+        total_iters=int(len(train_dataloader) / grad_accum_batch)
+    )
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer=optimizer,
         mode="min",
@@ -85,7 +94,7 @@ def train():
         cooldown=2,
         min_lr=1e-6
     )
-    earlystop_checker = EarlyStopping(patience=5, min_delta=0.005, mode="min")
+    earlystop_checker = EarlyStopping(patience=10, min_delta=0.005, mode="min")
 
     train_losses = []
     val_losses = []
@@ -125,6 +134,8 @@ def train():
                         accum_batch += 1
                         if (accum_batch >= grad_accum_batch) or (batch_i == len(dataloader) - 1):
                             optimizer.step()
+                            if epoch == 0:
+                                warmup_scheduler.step() # Stepup LR for 1st epoch
                             accum_batch = 0
                             optimizer.zero_grad()
                     pbar.update()
@@ -134,7 +145,8 @@ def train():
                 train_losses.append(epoch_loss)
             else:
                 val_losses.append(epoch_loss)
-                lr_scheduler.step(epoch_loss)
+                if epoch > 0:
+                    lr_scheduler.step(epoch_loss)
                 earlystop_triggered = earlystop_checker.check(epoch_loss)
                 improving = not earlystop_checker.is_stagnant
                 if improving or earlystop_triggered or epoch == 0:
