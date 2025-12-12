@@ -4,7 +4,7 @@ import os, gc
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler, Subset
 from torchvision.models.detection import keypointrcnn_resnet50_fpn, KeypointRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.keypoint_rcnn import KeypointRCNNPredictor
@@ -53,24 +53,40 @@ def train():
     print(f"Data loaded, time taken={(datetime.now()-start_time).total_seconds():.2f}s")
 
     batch_size = 2
-    grad_accum_batch = 2
+    grad_accum_steps = 8
     total_epochs = 100
+
+    # Sampling from large training dataset
+    val_dataset_len = len(val_dataset)
+    train_sampler = RandomSampler(
+        train_dataset,
+        replacement=False,
+        num_samples=4000
+    )
+
+    # Use fixed subset for validation
+    val_indices = list(range(val_dataset_len))
+    np.random.seed(42) # Optional seed
+    np.random.shuffle(val_indices)
+    val_subset = Subset(val_dataset, val_indices[:1000])
 
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_size=batch_size,
-        shuffle=True,
-        collate_fn=collate_fn
+        shuffle=False,
+        collate_fn=collate_fn,
+        sampler=train_sampler,
+        drop_last=True
     )
     val_dataloader = DataLoader(
-        dataset=val_dataset,
+        dataset=val_subset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         collate_fn=collate_fn
     )
 
     num_classes = None if category_ids is None else len(category_ids) + 1 # 0 = background
-    num_keypoints = 294  # Maximum keypoints for DeepFashion2 dataset
+    num_keypoints = 14  # Number of keypoints for trousers category from DeepFashion2 dataset
     model = get_model(num_classes=num_classes, num_keypoints=num_keypoints).to(device)
 
     params = [p for p in model.parameters() if p.requires_grad]
@@ -83,7 +99,7 @@ def train():
     warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
         optimizer=optimizer,
         start_factor=0.001,
-        total_iters=int(len(train_dataloader) / grad_accum_batch)
+        total_iters=int(len(train_dataloader) / grad_accum_steps)
     )
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer=optimizer,
@@ -115,7 +131,7 @@ def train():
                 #model.eval() # Do not change model for TorchVision's implementation
 
             epoch_losses = []
-            accum_batch = 0
+            accum_step = 0
             with tqdm(dataloader, desc=f"Epoch {epoch+1}/{total_epochs} - {phase}") as pbar:
                 for batch_i, (images, targets) in enumerate(dataloader):
                     # Move data to device
@@ -130,14 +146,15 @@ def train():
                     epoch_losses.append(loss.item())
 
                     if phase == "train":
+                        loss = loss / grad_accum_steps
                         loss.backward()
                         torch.nn.utils.clip_grad_norm_(params, max_norm=10.0) # Gradient clipping
-                        accum_batch += 1
-                        if (accum_batch >= grad_accum_batch) or (batch_i == len(dataloader) - 1):
+                        accum_step += 1
+                        if (accum_step >= grad_accum_steps) or (batch_i == len(dataloader) - 1):
                             optimizer.step()
                             if epoch == 0:
                                 warmup_scheduler.step() # Stepup LR for 1st epoch
-                            accum_batch = 0
+                            accum_step = 0
                             optimizer.zero_grad()
                     pbar.update()
 
