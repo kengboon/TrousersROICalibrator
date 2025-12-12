@@ -40,12 +40,12 @@ def train():
     category_ids = [8]
 
     train_dataset = DeepFashion2Dataset(
-        "datasets/deepfashion2/train-small",
+        "datasets/deepfashion2/train",
         category_ids=category_ids,
         exclude_occulded=True
     )
     val_dataset = DeepFashion2Dataset(
-        "datasets/deepfashion2/val-small",
+        "datasets/deepfashion2/validation",
         category_ids=category_ids,
         exclude_occulded=True
     )
