@@ -10,3 +10,4 @@ A keypoint detection model is trained with a subset of [DeepFashion2](https://gi
 
 The definition of keypoints is as below:
 
+<img width="164" height="242" alt="Trousers Landmarks (DeepFashion2)" src="https://github.com/user-attachments/assets/1ab19605-aed3-4f1e-973c-29ba2a260bd9" />
