@@ -211,9 +211,11 @@ _sgbak
 
 # Data Folders
 /datasets
+/images
 /logs
 /models
 /checkpoints
+/runs
 
 # Temporary files for debug
 /temp.ipynb
