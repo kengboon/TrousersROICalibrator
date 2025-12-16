@@ -36,10 +36,10 @@ def load_model_from_checkpoint(path: str):
     return model
 
 if __name__ == "__main__":
-    model = load_model_from_checkpoint("checkpoints/2025-12-10/10-41-13/epoch-24.pt")
+    model = load_model_from_checkpoint("checkpoints/2025-12-12/15-07-04/epoch-48.pt")
 
     # Saving the model weight
-    model_weight_path = "models/2025-12-10/10-41-13/epoch-24/model.safetensors"
+    model_weight_path = "models/2025-12-12/15-07-04/epoch-48/model.safetensors"
     os.makedirs(os.path.dirname(model_weight_path), exist_ok=True)
     save_model(model, model_weight_path)
 
