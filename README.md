@@ -14,7 +14,9 @@ The definition of keypoints is as below:
 
 ## ROI Calibration
 
+By learning the relationship of provided ROIs (bounding boxes) with the keypoints, ROIs can be auto aligned on target images.
 
+<img width="1304" height="690" alt="ROI Predictions" src="https://github.com/user-attachments/assets/2167dc4a-ecfb-4b16-9966-b7cb09477d8e" />
 
 # Licenses
 
