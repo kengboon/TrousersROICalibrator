@@ -19,7 +19,7 @@ class TrousersROICalibrator:
             outputs = self.model(image)[0]
 
         # Filter low confidence instances
-        filter = outputs["scores"] > self.score_thres
+        filter = outputs["scores"] >= self.score_thres
         boxes = outputs["boxes"][filter].cpu().numpy()
         keypoints = outputs["keypoints"][filter].cpu().numpy()
         keypoints = np.array([fix_trouser_orientation(kypts) for kypts in keypoints])
