@@ -1,0 +1,5 @@
+The open-source / permissive license applied to the code only, for demonstrating the keypoint detection results can be used for ROI calibration.
+
+Refer DeepFashion2 for its license (by this time, strictly for acedemic research only, not for commercial use).
+
+You should use licensed or self-annotated dataset for any commercial usage.
