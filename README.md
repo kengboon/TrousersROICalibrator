@@ -15,7 +15,7 @@ The definition of keypoints is as below:
 
 __Model weight:__
 
-<a href="[https://huggingface.co/kengboon](https://huggingface.co/kengboon/keypointrcnn-trousers)" target="_blank"><img src="https://img.shields.io/badge/Download%20Model%20Weight-EA9F00?style=for-the-badge&logoColor=white&logo=huggingface" height="40" alt="Download Model Weight"/></a>
+<a href="https://huggingface.co/kengboon/keypointrcnn-trousers" target="_blank"><img src="https://img.shields.io/badge/Download%20Model%20Weight-EA9F00?style=for-the-badge&logoColor=white&logo=huggingface" height="40" alt="Download Model Weight"/></a>
 
 ## ROI Calibration
 
