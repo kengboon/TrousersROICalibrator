@@ -15,7 +15,6 @@ class TrousersROICalibrator:
         
         # Define the 'Mesh' of triangles covering the pants
         # Each tuple is (Point A, Point B, Point C)
-        self.HAVE_LARGE_TRI = True # Set if include large triangle in topology
         self.MESH_TOPOLOGY = {
             # --- LEFT LEG ---
             # Waist Area
@@ -33,7 +32,6 @@ class TrousersROICalibrator:
             # Leg (Large Area)
             "L_Leg_Upper"   : [3, 5, 8],  # L_Hip(4), L_Hem(6), Crotch(9)
             "L_Leg_Lower"   : [5, 6, 8],  # L_Hem(6), L_InHem(7), Crotch(9)
-            #"L_Outseam"     : [0, 1, 5],  # L_Waist(1), M_Waist(2), L_Hem(6)
 
             # --- RIGHT LEG ---
             # Waist Area
@@ -51,7 +49,6 @@ class TrousersROICalibrator:
             # Leg (Large Area)
             "R_Leg_Upper"   : [13, 11, 8], # R_Hip(14), R_InHem(11), Crotch(9)
             "R_Leg_Lower"   : [10, 11, 8], # R_InHem(11), R_Hem(12), Crotch(9)
-            #"R_Outseam"     : [1, 2, 11]   # M_Waist(2), R_Waist(3), R_Hem(12)
         }
 
     def _get_keypoints(self, image, do_transforms: bool = True):
@@ -105,6 +102,17 @@ class TrousersROICalibrator:
             ref_keypoints = self._get_keypoints(ref_image)
             if ref_keypoints is None: raise ValueError("No keypoints detected.")
 
+        # 1. Pre-calculate Areas for all triangles to establish hierarchy
+        tri_areas = {}
+        for name, indices in self.MESH_TOPOLOGY.items():
+            pts = ref_keypoints[indices, :2]
+            # Area calculation
+            area = 0.5 * np.abs(np.cross(pts[1]-pts[0], pts[2]-pts[0]))
+            tri_areas[name] = area
+
+        # 2. Sort topology names by Area (Smallest -> Largest)
+        sorted_tri_names = sorted(tri_areas, key=tri_areas.get)
+
         print(f"Calibrating {len(user_drawn_boxes)} ROIs...")
 
         for roi_name, box in user_drawn_boxes.items():
@@ -114,26 +122,36 @@ class TrousersROICalibrator:
 
             best_tri_name = None
             best_coords = None
-            
-            # 1. Find which triangle contains the ROI center
-            # If multiple (overlapping) or none, pick the one with "most positive" weights or closest centroid
-            best_score = -float('inf') # Score = sum of negative weights (closer to 0 is better if outside)
+            computed_coords = []
 
-            for tri_name, indices in self.MESH_TOPOLOGY.items():
+            # EDGE MARGIN: How "deep" inside the triangle must it be?
+            # 0.05 means the point must be at least 5% away from any edge.
+            SAFE_MARGIN = 0.05
+
+            # Pass 1: Look for the SMALLEST triangle where ROI is SAFELY inside
+            DISABLE_PASS1 = True # Disable locking to small local triangle
+            for tri_name in sorted_tri_names:
+                indices = self.MESH_TOPOLOGY[tri_name]
                 pts = ref_keypoints[indices, :2] # Get X,Y of the 3 points
                 u, v, w = self._barycentric_coords(center, pts[0], pts[1], pts[2])
                 
-                # Check if point is strictly inside (all > 0)
-                is_inside = (u >= 0) and (v >= 0) and (w >= 0)
+                # Check if point is safely inside (all weights > margin)
+                is_inside = (u >= SAFE_MARGIN) and (v >= SAFE_MARGIN) and (w >= SAFE_MARGIN)
+                computed_coords.append((u, v, w)) # Save for Pass 2
 
-                if is_inside and not self.HAVE_LARGE_TRI:
+                if not DISABLE_PASS1 and is_inside:
                     best_tri_name = tri_name
                     best_coords = (u, v, w)
-                    break # Found a perfect match
-                else:
+                    break # Lock to small local triangle
+
+            # Pass 2: Fallback (If ROI is on the edge of all small triangles)
+            if best_tri_name is None:
+                best_score = -float('inf')
+                for tri_i, tri_name in enumerate(sorted_tri_names):
                     # If outside, track the "least outside" triangle (closest)
                     # A heuristic: max(min(u,v,w)) tries to find the one we are "least far" from
-                    score = min(u, v, w) 
+                    u, v, w = computed_coords[tri_i]
+                    score = min(u, v, w)
                     if score > best_score:
                         best_score = score
                         best_tri_name = tri_name
