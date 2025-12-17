@@ -10,13 +10,19 @@ A keypoint detection model is trained with a subset of [DeepFashion2](https://gi
 
 The definition of keypoints is as below:
 
-<img width="164" height="242" alt="Trousers Landmarks (DeepFashion2)" src="https://github.com/user-attachments/assets/1ab19605-aed3-4f1e-973c-29ba2a260bd9" />
+<img width="164" height="242" alt="Trousers Landmarks (DeepFashion2)" src="https://github.com/user-attachments/assets/1ab19605-aed3-4f1e-973c-29ba2a260bd9" /> 
+<img width="195" height="242" alt="Keypoint Detection on Jeans" src="https://github.com/user-attachments/assets/3600dea3-4db3-4c6a-8488-e820e390fb7a" />
+
+__Model weight:__
+
+<a href="[https://huggingface.co/kengboon](https://huggingface.co/kengboon/keypointrcnn-trousers)" target="_blank"><img src="https://img.shields.io/badge/Download%20Model%20Weight-EA9F00?style=for-the-badge&logoColor=white&logo=huggingface" height="40" alt="Download Model Weight"/></a>
 
 ## ROI Calibration
 
-By learning the relationship of provided ROIs (bounding boxes) with the keypoints, ROIs can be auto aligned on target images.
+By computing the [barycentric coordinates](https://mathworld.wolfram.com/BarycentricCoordinates.html) of reference ROIs (bounding boxes) corresponding to the triangles drawn from the keypoints detected, ROIs can be auto aligned on target images.
 
-<img width="1304" height="690" alt="ROI Predictions" src="https://github.com/user-attachments/assets/2167dc4a-ecfb-4b16-9966-b7cb09477d8e" />
+<img width="890" height="447" alt="2025-12-17 10 24 56" src="https://github.com/user-attachments/assets/d5d70897-d7b3-4ae7-a53b-2c237950ea21" />
+
 
 # Licenses
 
