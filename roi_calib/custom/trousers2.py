@@ -15,26 +15,43 @@ class TrousersROICalibrator:
         
         # Define the 'Mesh' of triangles covering the pants
         # Each tuple is (Point A, Point B, Point C)
+        self.HAVE_LARGE_TRI = True # Set if include large triangle in topology
         self.MESH_TOPOLOGY = {
             # --- LEFT LEG ---
-            # Thigh Area (Split into 2 triangles)
-            "L_Thigh_Upper": [3, 8, 4],  # L_Hip(4), Crotch(9), L_Knee(5)
-            "L_Thigh_Lower": [8, 7, 4],  # Crotch(9), L_InKnee(8), L_Knee(5)
+            # Waist Area
+            "L_Waist_Upper" : [0, 1, 3],  # L_Waist(1), M_Waist(2), L_Hip(4)
+            "L_Waist_Lower" : [0, 3, 8],  # L_Waist(1), L_Hip(4), Crotch(9)
+            "L_Waist_Center": [0, 1, 8],  # L_Waist(1), M_Waist(2), Crotch(9)
+            # Crotch Area
+            "L_Crotch"      : [1, 3, 8],  # M_Waist(2), L_Hip(4), Crotch(9)
+            # Thigh Area
+            "L_Thigh_Upper" : [3, 8, 4],  # L_Hip(4), Crotch(9), L_Knee(5)
+            "L_Thigh_Lower" : [8, 7, 4],  # Crotch(9), L_InKnee(8), L_Knee(5)
             # Calf Area
-            "L_Calf_Upper":  [4, 7, 5],  # L_Knee(5), L_InKnee(8), L_Hem(6)
-            "L_Calf_Lower":  [7, 6, 5],  # L_InKnee(8), L_InHem(7), L_Hem(6)
+            "L_Calf_Upper"  : [4, 7, 5],  # L_Knee(5), L_InKnee(8), L_Hem(6)
+            "L_Calf_Lower"  : [7, 6, 5],  # L_InKnee(8), L_InHem(7), L_Hem(6)
+            # Leg (Large Area)
+            "L_Leg_Upper"   : [3, 5, 8],  # L_Hip(4), L_Hem(6), Crotch(9)
+            "L_Leg_Lower"   : [5, 6, 8],  # L_Hem(6), L_InHem(7), Crotch(9)
+            #"L_Outseam"     : [0, 1, 5],  # L_Waist(1), M_Waist(2), L_Hem(6)
 
             # --- RIGHT LEG ---
+            # Waist Area
+            "R_Waist_Upper" : [1, 2, 13],  # M_Waist(2), R_Waist(3), R_Hip(14)
+            "R_Waist_Lower" : [1, 13, 8],  # M_Waist(2), R_Hip(14), Crotch(9)
+            "L_Waist_Center": [1, 2, 8],   # M_Waist(2), R_Waist(3), Crotch(9)
+            # Crotch
+            "R_Crotch"      : [1, 13, 8],  # M_Waist(2), R_Hip(14), Crotch(9)
             # Thigh Area
-            "R_Thigh_Upper": [13, 8, 12], # R_Hip(14), Crotch(9), R_Knee(13)
-            "R_Thigh_Lower": [8, 9, 12],  # Crotch(9), R_InKnee(10), R_Knee(13)
+            "R_Thigh_Upper" : [13, 8, 12], # R_Hip(14), Crotch(9), R_Knee(13)
+            "R_Thigh_Lower" : [8, 9, 12],  # Crotch(9), R_InKnee(10), R_Knee(13)
             # Calf Area
-            "R_Calf_Upper":  [12, 9, 11], # R_Knee(13), R_InKnee(10), R_Hem(12)
-            "R_Calf_Lower":  [9, 10, 11], # R_InKnee(10), R_InHem(11), R_Hem(12)
-            
-            # --- WAIST (Optional, for pockets) ---
-            "Waist_Left":    [0, 1, 3],   # L_Waist(1), M_Waist(2), L_Hip(4)
-            "Waist_Right":   [1, 2, 13],  # M_Waist(2), R_Waist(3), R_Hip(14)
+            "R_Calf_Upper"  : [12, 9, 11], # R_Knee(13), R_InKnee(10), R_Hem(12)
+            "R_Calf_Lower"  : [9, 10, 11], # R_InKnee(10), R_InHem(11), R_Hem(12)
+            # Leg (Large Area)
+            "R_Leg_Upper"   : [13, 11, 8], # R_Hip(14), R_InHem(11), Crotch(9)
+            "R_Leg_Lower"   : [10, 11, 8], # R_InHem(11), R_Hem(12), Crotch(9)
+            #"R_Outseam"     : [1, 2, 11]   # M_Waist(2), R_Waist(3), R_Hem(12)
         }
 
     def _get_keypoints(self, image, do_transforms: bool = True):
@@ -108,8 +125,8 @@ class TrousersROICalibrator:
                 
                 # Check if point is strictly inside (all > 0)
                 is_inside = (u >= 0) and (v >= 0) and (w >= 0)
-                
-                if is_inside:
+
+                if is_inside and not self.HAVE_LARGE_TRI:
                     best_tri_name = tri_name
                     best_coords = (u, v, w)
                     break # Found a perfect match
