@@ -19,10 +19,11 @@ __Model weight:__
 
 ## ROI Calibration
 
-By computing the [barycentric coordinates](https://mathworld.wolfram.com/BarycentricCoordinates.html) of reference ROIs (bounding boxes) corresponding to the triangles drawn from the keypoints detected, ROIs can be auto aligned on target images.
+By computing the [barycentric coordinates](https://mathworld.wolfram.com/BarycentricCoordinates.html) of reference ROIs (bounding boxes) corresponding to the triangles drawn from the keypoints detected, ROIs can be auto aligned and adjusted on target images.
 
-<img width="890" height="447" alt="2025-12-17 10 24 56" src="https://github.com/user-attachments/assets/d5d70897-d7b3-4ae7-a53b-2c237950ea21" />
+__Robust:__ The position, size, and ratio of ROIs are adjusted accordingly based on keypoints.
 
+<img width="814" height="482" alt="Sample ROIs Prediction" src="https://github.com/user-attachments/assets/0150a189-befa-483e-9191-fea78140680a" />
 
 # Licenses
 
