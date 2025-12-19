@@ -19,8 +19,8 @@ class TrousersROICalibrator:
             # --- LEFT LEG ---
             # Waist Area
             "L_Waist_Upper" : [0, 1, 3],  # L_Waist(1), M_Waist(2), L_Hip(4)
-            "L_Waist_Lower" : [0, 3, 8],  # L_Waist(1), L_Hip(4), Crotch(9)
-            "L_Waist_Center": [0, 1, 8],  # L_Waist(1), M_Waist(2), Crotch(9)
+            #"L_Waist_Lower" : [0, 3, 8],  # L_Waist(1), L_Hip(4), Crotch(9)
+            #"L_Waist_Center": [0, 1, 8],  # L_Waist(1), M_Waist(2), Crotch(9)
             # Crotch Area
             "L_Crotch"      : [1, 3, 8],  # M_Waist(2), L_Hip(4), Crotch(9)
             # Thigh Area
@@ -36,8 +36,8 @@ class TrousersROICalibrator:
             # --- RIGHT LEG ---
             # Waist Area
             "R_Waist_Upper" : [1, 2, 13],  # M_Waist(2), R_Waist(3), R_Hip(14)
-            "R_Waist_Lower" : [1, 13, 8],  # M_Waist(2), R_Hip(14), Crotch(9)
-            "L_Waist_Center": [1, 2, 8],   # M_Waist(2), R_Waist(3), Crotch(9)
+            #"R_Waist_Lower" : [1, 13, 8],  # M_Waist(2), R_Hip(14), Crotch(9)
+            #"L_Waist_Center": [1, 2, 8],   # M_Waist(2), R_Waist(3), Crotch(9)
             # Crotch
             "R_Crotch"      : [1, 13, 8],  # M_Waist(2), R_Hip(14), Crotch(9)
             # Thigh Area
@@ -52,7 +52,6 @@ class TrousersROICalibrator:
         }
 
     def _get_keypoints(self, image, do_transforms: bool = True):
-        # (Same model inference code as before)
         if do_transforms and self.transforms is not None:
             image = self.transforms(image)
         image = image.unsqueeze(0).to(device=self.device)
@@ -61,11 +60,12 @@ class TrousersROICalibrator:
         with torch.no_grad():
             outputs = self.model(image)[0]
 
-        filter_mask = outputs["scores"] >= self.score_thres
-        if torch.sum(filter_mask) == 0:
+        max_score = outputs["scores"].max() # Objectness score
+        if max_score < self.score_thres:
             return None
 
-        # Assume taking the best detection
+        # Only get the best detection
+        filter_mask = outputs["scores"] == max_score
         keypoints = outputs["keypoints"][filter_mask].cpu().numpy()[0]
         # keypoints shape: (14, 3) -> [x, y, visibility]
         return keypoints
@@ -98,9 +98,11 @@ class TrousersROICalibrator:
     def learn_rois(self, ref_image, user_drawn_boxes, ref_keypoints=None, reset_learned=True):
         if reset_learned:
             self.learned_cfgs = {}
+
         if ref_keypoints is None:
             ref_keypoints = self._get_keypoints(ref_image)
-            if ref_keypoints is None: raise ValueError("No keypoints detected.")
+            if ref_keypoints is None:
+                raise ValueError("No keypoints detected.")
 
         # 1. Pre-calculate Areas for all triangles to establish hierarchy
         tri_areas = {}
@@ -117,94 +119,116 @@ class TrousersROICalibrator:
 
         for roi_name, box in user_drawn_boxes.items():
             x1, y1, x2, y2 = box
-            center = np.array([(x1 + x2) / 2, (y1 + y2) / 2])
-            box_dims = np.array([x2 - x1, y2 - y1])
+            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2 # Center points
 
-            best_tri_name = None
-            best_coords = None
-            computed_coords = []
+            # Define 4 Midpoints: [Top, Bottom, Left, Right]
+            midpoints = [
+                (np.array([cx, y1]), "Top"),
+                (np.array([cx, y2]), "Bottom"),
+                (np.array([x1, cy]), "Left"),
+                (np.array([x2, cy]), "Right")
+            ]
+            midpoint_cfg = []
 
-            # EDGE MARGIN: How "deep" inside the triangle must it be?
-            # 0.05 means the point must be at least 5% away from any edge.
-            SAFE_MARGIN = 0.05
+            # Process each point individually
+            for pt, pt_name in midpoints:
+                best_tri_name = None
+                best_coords = None
+                computed_coords = []
 
-            # Pass 1: Look for the SMALLEST triangle where ROI is SAFELY inside
-            DISABLE_PASS1 = True # Disable locking to small local triangle
-            for tri_name in sorted_tri_names:
-                indices = self.MESH_TOPOLOGY[tri_name]
-                pts = ref_keypoints[indices, :2] # Get X,Y of the 3 points
-                u, v, w = self._barycentric_coords(center, pts[0], pts[1], pts[2])
+                # EDGE MARGIN: How "deep" inside the triangle must it be?
+                # 0.05 means the point must be at least 5% away from any edge.
+                SAFE_MARGIN = 0.05
+
+                # Pass 1: Look for the SMALLEST triangle where ROI is SAFELY inside
+
+                # Whether to disable locking to small local triangle
+                DISABLE_PASS1 = False
+
+                for tri_name in sorted_tri_names:
+                    indices = self.MESH_TOPOLOGY[tri_name]
+                    pts = ref_keypoints[indices, :2] # Get X,Y of the 3 points
+                    u, v, w = self._barycentric_coords(pt, pts[0], pts[1], pts[2])
                 
-                # Check if point is safely inside (all weights > margin)
-                is_inside = (u >= SAFE_MARGIN) and (v >= SAFE_MARGIN) and (w >= SAFE_MARGIN)
-                computed_coords.append((u, v, w)) # Save for Pass 2
+                    # Check if point is safely inside (all weights > margin)
+                    is_safely_inside = (u >= SAFE_MARGIN) and (v >= SAFE_MARGIN) and (w >= SAFE_MARGIN)
+                    computed_coords.append((u, v, w)) # Save for Pass 2
 
-                if not DISABLE_PASS1 and is_inside:
-                    best_tri_name = tri_name
-                    best_coords = (u, v, w)
-                    break # Lock to small local triangle
-
-            # Pass 2: Fallback (If ROI is on the edge of all small triangles)
-            if best_tri_name is None:
-                best_score = -float('inf')
-                for tri_i, tri_name in enumerate(sorted_tri_names):
-                    # If outside, track the "least outside" triangle (closest)
-                    # A heuristic: max(min(u,v,w)) tries to find the one we are "least far" from
-                    u, v, w = computed_coords[tri_i]
-                    score = min(u, v, w)
-                    if score > best_score:
-                        best_score = score
+                    if not DISABLE_PASS1 and is_safely_inside:
                         best_tri_name = tri_name
                         best_coords = (u, v, w)
+                        break # Lock to small local triangle
 
-            # 2. Store Config
-            # We also store the box size relative to the triangle's "size" (e.g. area or edge len)
-            # But for simplicity, we'll store raw w/h and scale it by the triangle's scale factor during prediction
-            
-            # Calculate Reference Scale (Square root of Triangle Area)
-            pts = ref_keypoints[self.MESH_TOPOLOGY[best_tri_name], :2]
-            ref_area = 0.5 * np.abs(np.cross(pts[1]-pts[0], pts[2]-pts[0]))
-            ref_scale = np.sqrt(ref_area) if ref_area > 0 else 1.0
+                # Pass 2: Fallback (If ROI is on the edge of all small triangles)
+                if best_tri_name is None:
+                    best_score = -float('inf')
+                    for tri_i, tri_name in enumerate(sorted_tri_names):
+                        # If outside, track the "least outside" triangle (closest)
+                        # A heuristic: max(min(u,v,w)) tries to find the one we are "least far" from
+                        u, v, w = computed_coords[tri_i]
+                        score = min(u, v, w)
+                        if score > best_score:
+                            best_score = score
+                            best_tri_name = tri_name
+                            best_coords = (u, v, w)
 
-            self.learned_cfgs[roi_name] = {
-                "triangle": best_tri_name,
-                "bary_weights": best_coords,
-                "rel_dims": box_dims / ref_scale, # Store dimensions normalized to triangle size
-            }
-            print(f" - Learned '{roi_name}': attached to {best_tri_name}")
+                midpoint_cfg.append({
+                    "name":  pt_name,
+                    "triangle": best_tri_name,
+                    "bary_weights": best_coords,
+                })
+
+            self.learned_cfgs[roi_name] = midpoint_cfg
+
+            # Optional for debug
+            print(f" - Learned '{roi_name}': {[(cfg['name'], cfg['triangle']) for cfg in self.learned_cfgs[roi_name]]}")
 
     def predict_rois(self, target_image):
         if not self.learned_cfgs: return {}
         
         tgt_keypoints = self._get_keypoints(target_image)
-        if tgt_keypoints is None: return {}
+        if tgt_keypoints is None:
+            return {}
 
         results = {}
 
-        for roi_name, cfg in self.learned_cfgs.items():
-            tri_name = cfg["triangle"]
-            u, v, w = cfg["bary_weights"]
-            indices = self.MESH_TOPOLOGY[tri_name]
+        for roi_name, pts_cfg in self.learned_cfgs.items():
+            recon_pts = []
+            # Reconstruct 4 middle points
+            for cfg in pts_cfg:
+                tri_name = cfg["triangle"]
+                u, v, w = cfg["bary_weights"]
+                indices = self.MESH_TOPOLOGY[tri_name]
             
-            # Get the new positions of the 3 anchor points
-            # Ensure they are visible! If invisible, inference might be shaky.
-            pts = tgt_keypoints[indices, :2] 
+                # Get the new positions of the 3 anchor points
+                # Ensure they are visible! If invisible, inference might be shaky.
+                pts = tgt_keypoints[indices, :2] 
+                p_new = self._cartesian_coords(u, v, w, pts[0], pts[1], pts[2])
+                recon_pts.append(p_new)
             
             # 1. Reconstruct Center
-            new_center = self._cartesian_coords(u, v, w, pts[0], pts[1], pts[2])
+            p_top, p_bottom, p_left, p_right = recon_pts
+            center = (p_top + p_bottom + p_left + p_right) / 4.0
             
-            # 2. Reconstruct Scale
-            # Calculate new triangle area to determine scale factor
-            new_area = 0.5 * np.abs(np.cross(pts[1]-pts[0], pts[2]-pts[0]))
-            new_scale = np.sqrt(new_area) if new_area > 0 else 1.0
+            # 2. Width Vector (Left -> Right)
+            vec_w = (p_right - p_left) / 2.0 
             
-            new_w, new_h = cfg["rel_dims"] * new_scale
+            # 3. Height Vector (Top -> Bottom)
+            vec_h = (p_bottom - p_top) / 2.0
             
-            # 3. Build Box
-            nx1 = int(new_center[0] - new_w / 2)
-            ny1 = int(new_center[1] - new_h / 2)
-            nx2 = int(new_center[0] + new_w / 2)
-            ny2 = int(new_center[1] + new_h / 2)
+            # 4. Reconstruct Corners
+            c1 = center - vec_w - vec_h # Top-Left
+            c2 = center + vec_w - vec_h # Top-Right
+            c3 = center + vec_w + vec_h # Bottom-Right
+            c4 = center - vec_w + vec_h # Bottom-Left
+            
+            all_corners = np.array([c1, c2, c3, c4])
+            
+            # 5. Bounding Box
+            nx1 = int(np.min(all_corners[:, 0]))
+            ny1 = int(np.min(all_corners[:, 1]))
+            nx2 = int(np.max(all_corners[:, 0]))
+            ny2 = int(np.max(all_corners[:, 1]))
             
             results[roi_name] = [nx1, ny1, nx2, ny2]
 
